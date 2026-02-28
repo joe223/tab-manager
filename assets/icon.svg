@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#7C3AED"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="url(#bg)"/>
+  
+  <!-- Tab 1 (back) -->
+  <rect x="24" y="38" width="80" height="52" rx="6" fill="#fff" fill-opacity="0.2"/>
+  
+  <!-- Tab 2 (middle) -->
+  <rect x="32" y="46" width="80" height="52" rx="6" fill="#fff" fill-opacity="0.3"/>
+  
+  <!-- Tab 3 (front) -->
+  <rect x="40" y="54" width="64" height="44" rx="6" fill="#fff"/>
+  
+  <!-- Tab headers -->
+  <rect x="40" y="54" width="64" height="14" rx="6" fill="#E0E7FF"/>
+  <rect x="44" y="58" width="16" height="6" rx="2" fill="#4F46E5" fill-opacity="0.6"/>
+  <rect x="64" y="58" width="16" height="6" rx="2" fill="#7C3AED" fill-opacity="0.4"/>
+  <rect x="84" y="58" width="16" height="6" rx="2" fill="#A78BFA" fill-opacity="0.3"/>
+  
+  <!-- Checkmark -->
+  <path d="M56 80 L64 88 L80 72" stroke="#10B981" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
