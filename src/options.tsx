@@ -1,17 +1,33 @@
 import { useEffect, useState } from "react"
 import { getSettings, saveSettings } from "./storage"
-import type { Settings } from "./types"
+import { getClosedPages, clearClosedPages, removeClosedPage, getAppStats, getDomainStats } from "./storage"
+import type { Settings, ClosedPage, DomainStats } from "./types"
 import { DEFAULT_SETTINGS } from "./types"
+import { formatTime } from "./utils"
+
+type TabType = "settings" | "history" | "report"
 
 function OptionsIndex() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [whitelistText, setWhitelistText] = useState("")
   const [closedCount, setClosedCount] = useState(0)
   const [saved, setSaved] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabType>("settings")
+  const [closedPages, setClosedPages] = useState<ClosedPage[]>([])
+  const [domainStats, setDomainStats] = useState<Record<string, DomainStats>>({})
+  const [appStats, setAppStats] = useState<{totalClosed: number, totalTimeSaved: number}>({totalClosed: 0, totalTimeSaved: 0})
 
   useEffect(() => {
     Promise.all([loadSettings(), loadClosedCount()])
   }, [])
+
+  useEffect(() => {
+    if (activeTab === "history") {
+      loadClosedPages()
+    } else if (activeTab === "report") {
+      loadStats()
+    }
+  }, [activeTab])
 
   async function loadSettings() {
     const s = await getSettings()
@@ -22,6 +38,20 @@ function OptionsIndex() {
   async function loadClosedCount() {
     const result = await chrome.storage.local.get("closedCount")
     setClosedCount(result.closedCount || 0)
+  }
+
+  async function loadClosedPages() {
+    const pages = await getClosedPages()
+    setClosedPages(pages)
+  }
+
+  async function loadStats() {
+    const [stats, domains] = await Promise.all([
+      getAppStats(),
+      getDomainStats()
+    ])
+    setAppStats({ totalClosed: stats.totalClosed, totalTimeSaved: stats.totalTimeSaved })
+    setDomainStats(domains)
   }
 
   async function updateSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
@@ -52,6 +82,42 @@ function OptionsIndex() {
     showSaved()
   }
 
+  async function handleClearHistory() {
+    await clearClosedPages()
+    setClosedPages([])
+    showSaved()
+  }
+
+  async function handleRemovePage(id: string) {
+    await removeClosedPage(id)
+    await loadClosedPages()
+  }
+
+  async function handleRestorePage(page: ClosedPage) {
+    await chrome.tabs.create({ url: page.url, active: false })
+    await removeClosedPage(page.id)
+    await loadClosedPages()
+  }
+
+  function formatDate(timestamp: number): string {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays < 7) return `${diffDays}d ago`
+    return date.toLocaleDateString()
+  }
+
+  const topDomains = Object.values(domainStats)
+    .sort((a, b) => b.visitCount - a.visitCount)
+    .slice(0, 10)
+
   return (
     <div style={styles.page}>
       {saved && <div style={styles.savedToast}>Settings saved</div>}
@@ -78,83 +144,269 @@ function OptionsIndex() {
           </div>
         </header>
 
+        <nav style={styles.nav}>
+          <button 
+            style={{...styles.navBtn, ...(activeTab === "settings" ? styles.navBtnActive : {})}}
+            onClick={() => setActiveTab("settings")}
+          >
+            <svg style={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Settings
+          </button>
+          <button 
+            style={{...styles.navBtn, ...(activeTab === "history" ? styles.navBtnActive : {})}}
+            onClick={() => setActiveTab("history")}
+          >
+            <svg style={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12,6 12,12 16,14"/>
+            </svg>
+            History
+          </button>
+          <button 
+            style={{...styles.navBtn, ...(activeTab === "report" ? styles.navBtnActive : {})}}
+            onClick={() => setActiveTab("report")}
+          >
+            <svg style={styles.navIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+            Report
+          </button>
+        </nav>
+
         <main style={styles.main}>
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Tab Grouping</h2>
-            <div style={styles.settingCard}>
-              <div style={styles.settingInfo}>
-                <div style={styles.settingLabel}>Auto-group by domain</div>
-                <div style={styles.settingDesc}>Automatically organize new tabs into groups based on their domain</div>
-              </div>
-              <button
-                style={{ ...styles.toggle, ...(settings.autoGroupEnabled ? styles.toggleActive : {}) }}
-                onClick={() => updateSetting("autoGroupEnabled", !settings.autoGroupEnabled)}
-              >
-                <div style={{ ...styles.toggleKnob, ...(settings.autoGroupEnabled ? styles.toggleKnobActive : {}) }} />
-              </button>
-            </div>
-          </section>
-
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Auto-close Settings</h2>
-            <div style={styles.settingCard}>
-              <div style={styles.settingInfo}>
-                <div style={styles.settingLabel}>Auto-close inactive tabs</div>
-                <div style={styles.settingDesc}>Close tabs that have not been used for a specified period</div>
-              </div>
-              <button
-                style={{ ...styles.toggle, ...(settings.autoCloseEnabled ? styles.toggleActive : {}) }}
-                onClick={() => updateSetting("autoCloseEnabled", !settings.autoCloseEnabled)}
-              >
-                <div style={{ ...styles.toggleKnob, ...(settings.autoCloseEnabled ? styles.toggleKnobActive : {}) }} />
-              </button>
-            </div>
-
-            <div style={styles.settingsGrid}>
-              <div style={styles.inputCard}>
-                <label style={styles.inputLabel}>Inactive threshold</label>
-                <div style={styles.inputRow}>
-                  <input
-                    style={styles.numberInput}
-                    type="number"
-                    min={1}
-                    max={1440}
-                    value={settings.inactiveMinutes}
-                    onChange={(e) => updateSetting("inactiveMinutes", Math.max(1, Math.min(1440, parseInt(e.target.value, 10) || 60)))}
-                  />
-                  <span style={styles.inputUnit}>minutes</span>
+          {activeTab === "settings" && (
+            <>
+              <section style={styles.section}>
+                <h2 style={styles.sectionTitle}>Tab Grouping</h2>
+                <div style={styles.settingCard}>
+                  <div style={styles.settingInfo}>
+                    <div style={styles.settingLabel}>Auto-group by domain</div>
+                    <div style={styles.settingDesc}>Automatically organize new tabs into groups based on their domain</div>
+                  </div>
+                  <button
+                    style={{ ...styles.toggle, ...(settings.autoGroupEnabled ? styles.toggleActive : {}) }}
+                    onClick={() => updateSetting("autoGroupEnabled", !settings.autoGroupEnabled)}
+                  >
+                    <div style={{ ...styles.toggleKnob, ...(settings.autoGroupEnabled ? styles.toggleKnobActive : {}) }} />
+                  </button>
                 </div>
-                <div style={styles.inputHint}>Time before a tab is considered inactive</div>
-              </div>
+              </section>
 
-              <div style={styles.inputCard}>
-                <label style={styles.inputLabel}>Check interval</label>
-                <div style={styles.inputRow}>
-                  <input
-                    style={styles.numberInput}
-                    type="number"
-                    min={1}
-                    max={60}
-                    value={settings.checkIntervalMinutes}
-                    onChange={(e) => updateSetting("checkIntervalMinutes", Math.max(1, Math.min(60, parseInt(e.target.value, 10) || 5)))}
-                  />
-                  <span style={styles.inputUnit}>minutes</span>
+              <section style={styles.section}>
+                <h2 style={styles.sectionTitle}>Auto-close Settings</h2>
+                <div style={styles.settingCard}>
+                  <div style={styles.settingInfo}>
+                    <div style={styles.settingLabel}>Auto-close inactive tabs</div>
+                    <div style={styles.settingDesc}>Close tabs that have not been used for a specified period</div>
+                  </div>
+                  <button
+                    style={{ ...styles.toggle, ...(settings.autoCloseEnabled ? styles.toggleActive : {}) }}
+                    onClick={() => updateSetting("autoCloseEnabled", !settings.autoCloseEnabled)}
+                  >
+                    <div style={{ ...styles.toggleKnob, ...(settings.autoCloseEnabled ? styles.toggleKnobActive : {}) }} />
+                  </button>
                 </div>
-                <div style={styles.inputHint}>How often to check for inactive tabs</div>
-              </div>
-            </div>
-          </section>
 
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Protected Domains</h2>
-            <p style={styles.sectionDesc}>Domains listed below will never be auto-closed. Enter one domain per line.</p>
-            <textarea
-              style={styles.textarea}
-              placeholder="google.com&#10;github.com&#10;stackoverflow.com"
-              value={whitelistText}
-              onChange={(e) => handleWhitelistChange(e.target.value)}
-            />
-          </section>
+                <div style={styles.settingsGrid}>
+                  <div style={styles.inputCard}>
+                    <label style={styles.inputLabel}>Inactive threshold</label>
+                    <div style={styles.inputRow}>
+                      <input
+                        style={styles.numberInput}
+                        type="number"
+                        min={1}
+                        max={1440}
+                        value={settings.inactiveMinutes}
+                        onChange={(e) => updateSetting("inactiveMinutes", Math.max(1, Math.min(1440, parseInt(e.target.value, 10) || 60)))}
+                      />
+                      <span style={styles.inputUnit}>minutes</span>
+                    </div>
+                    <div style={styles.inputHint}>Time before a tab is considered inactive</div>
+                  </div>
+
+                  <div style={styles.inputCard}>
+                    <label style={styles.inputLabel}>Check interval</label>
+                    <div style={styles.inputRow}>
+                      <input
+                        style={styles.numberInput}
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={settings.checkIntervalMinutes}
+                        onChange={(e) => updateSetting("checkIntervalMinutes", Math.max(1, Math.min(60, parseInt(e.target.value, 10) || 5)))}
+                      />
+                      <span style={styles.inputUnit}>minutes</span>
+                    </div>
+                    <div style={styles.inputHint}>How often to check for inactive tabs</div>
+                  </div>
+                </div>
+              </section>
+
+              <section style={styles.section}>
+                <h2 style={styles.sectionTitle}>Smart Close</h2>
+                <p style={styles.sectionDesc}>Automatically adjust close time for frequently visited pages</p>
+                <div style={styles.settingCard}>
+                  <div style={styles.settingInfo}>
+                    <div style={styles.settingLabel}>Enable smart close</div>
+                    <div style={styles.settingDesc}>Extend close time for pages you visit frequently</div>
+                  </div>
+                  <button
+                    style={{ ...styles.toggle, ...(settings.enableSmartClose ? styles.toggleActive : {}) }}
+                    onClick={() => updateSetting("enableSmartClose", !settings.enableSmartClose)}
+                  >
+                    <div style={{ ...styles.toggleKnob, ...(settings.enableSmartClose ? styles.toggleKnobActive : {}) }} />
+                  </button>
+                </div>
+
+                {settings.enableSmartClose && (
+                  <div style={styles.settingsGrid}>
+                    <div style={styles.inputCard}>
+                      <label style={styles.inputLabel}>Visit threshold</label>
+                      <div style={styles.inputRow}>
+                        <input
+                          style={styles.numberInput}
+                          type="number"
+                          min={3}
+                          max={100}
+                          value={settings.frequentVisitThreshold}
+                          onChange={(e) => updateSetting("frequentVisitThreshold", Math.max(3, Math.min(100, parseInt(e.target.value, 10) || 10)))}
+                        />
+                        <span style={styles.inputUnit}>visits</span>
+                      </div>
+                      <div style={styles.inputHint}>Min visits to be considered frequent</div>
+                    </div>
+
+                    <div style={styles.inputCard}>
+                      <label style={styles.inputLabel}>Time multiplier</label>
+                      <div style={styles.inputRow}>
+                        <input
+                          style={styles.numberInput}
+                          type="number"
+                          min={2}
+                          max={10}
+                          value={settings.frequentVisitMultiplier}
+                          onChange={(e) => updateSetting("frequentVisitMultiplier", Math.max(2, Math.min(10, parseInt(e.target.value, 10) || 3)))}
+                        />
+                        <span style={styles.inputUnit}>x</span>
+                      </div>
+                      <div style={styles.inputHint}>Multiply threshold for frequent pages</div>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section style={styles.section}>
+                <h2 style={styles.sectionTitle}>Protected Domains</h2>
+                <p style={styles.sectionDesc}>Domains listed below will never be auto-closed. Enter one domain per line.</p>
+                <textarea
+                  style={styles.textarea}
+                  placeholder="google.com&#10;github.com&#10;stackoverflow.com"
+                  value={whitelistText}
+                  onChange={(e) => handleWhitelistChange(e.target.value)}
+                />
+              </section>
+            </>
+          )}
+
+          {activeTab === "history" && (
+            <section style={styles.section}>
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>Closed Pages History</h2>
+                <button style={styles.clearBtn} onClick={handleClearHistory}>Clear All</button>
+              </div>
+              <p style={styles.sectionDesc}>View and restore recently closed tabs</p>
+              
+              {closedPages.length === 0 ? (
+                <div style={styles.emptyState}>
+                  <svg style={styles.emptyIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                  </svg>
+                  <p>No closed pages yet</p>
+                </div>
+              ) : (
+                <div style={styles.historyList}>
+                  {closedPages.map(page => (
+                    <div key={page.id} style={styles.historyItem}>
+                      <div style={styles.historyInfo}>
+                        <div style={styles.historyTitle}>{page.title}</div>
+                        <div style={styles.historyDomain}>{page.domain}</div>
+                      </div>
+                      <div style={styles.historyMeta}>
+                        <span style={styles.historyTime}>{formatDate(page.closedAt)}</span>
+                        <button 
+                          style={styles.restoreBtn}
+                          onClick={() => handleRestorePage(page)}
+                        >
+                          Restore
+                        </button>
+                        <button 
+                          style={styles.deleteBtn}
+                          onClick={() => handleRemovePage(page.id)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeTab === "report" && (
+            <section style={styles.section}>
+              <h2 style={styles.sectionTitle}>Usage Analytics</h2>
+              <p style={styles.sectionDesc}>Insights into your tab usage patterns</p>
+              
+              <div style={styles.statsGrid}>
+                <div style={styles.statCard}>
+                  <div style={styles.statCardValue}>{appStats.totalClosed}</div>
+                  <div style={styles.statCardLabel}>Total Closed</div>
+                </div>
+                <div style={styles.statCard}>
+                  <div style={styles.statCardValue}>{formatTime(Math.floor(appStats.totalTimeSaved / 60000))}</div>
+                  <div style={styles.statCardLabel}>Est. Time Saved</div>
+                </div>
+                <div style={styles.statCard}>
+                  <div style={styles.statCardValue}>{Object.keys(domainStats).length}</div>
+                  <div style={styles.statCardLabel}>Domains Tracked</div>
+                </div>
+              </div>
+
+              <h3 style={styles.subsectionTitle}>Top Domains</h3>
+              <div style={styles.domainList}>
+                {topDomains.length === 0 ? (
+                  <div style={styles.emptyState}>
+                    <p>No domain data yet. Start browsing!</p>
+                  </div>
+                ) : (
+                  topDomains.map(domain => (
+                    <div key={domain.domain} style={styles.domainItem}>
+                      <div style={styles.domainInfo}>
+                        <div style={styles.domainName}>{domain.domain}</div>
+                        <div style={styles.domainStats}>
+                          {domain.visitCount} visits · {domain.closedCount} closed
+                        </div>
+                      </div>
+                      <div style={styles.domainBar}>
+                        <div 
+                          style={{
+                            ...styles.domainBarFill,
+                            width: `${Math.min(100, (domain.visitCount / (topDomains[0]?.visitCount || 1)) * 100)}%`
+                          }} 
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+          )}
         </main>
 
         <footer style={styles.footer}>
@@ -412,6 +664,193 @@ const styles: Record<string, React.CSSProperties> = {
   },
   footerDot: {
     margin: '0 8px'
+  },
+  nav: {
+    display: 'flex',
+    gap: 8,
+    marginBottom: 24,
+    borderBottom: '1px solid #eee',
+    paddingBottom: 0
+  },
+  navBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '12px 20px',
+    background: 'none',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    fontSize: 14,
+    fontWeight: 500,
+    color: '#666',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    marginBottom: -1
+  },
+  navBtnActive: {
+    color: '#4F46E5',
+    borderBottomColor: '#4F46E5'
+  },
+  navIcon: {
+    width: 18,
+    height: 18
+  },
+  sectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  clearBtn: {
+    padding: '8px 16px',
+    background: '#FEE2E2',
+    color: '#DC2626',
+    border: 'none',
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer'
+  },
+  emptyState: {
+    textAlign: 'center',
+    padding: '48px 24px',
+    color: '#888'
+  },
+  emptyIcon: {
+    width: 48,
+    height: 48,
+    marginBottom: 16,
+    opacity: 0.3
+  },
+  historyList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8
+  },
+  historyItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    background: '#fff',
+    padding: '12px 16px',
+    borderRadius: 10,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+  },
+  historyInfo: {
+    flex: 1,
+    minWidth: 0
+  },
+  historyTitle: {
+    fontSize: 14,
+    fontWeight: 500,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  },
+  historyDomain: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2
+  },
+  historyMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 16
+  },
+  historyTime: {
+    fontSize: 12,
+    color: '#888',
+    whiteSpace: 'nowrap'
+  },
+  restoreBtn: {
+    padding: '6px 12px',
+    background: '#EEF2FF',
+    color: '#4F46E5',
+    border: 'none',
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: 'pointer'
+  },
+  deleteBtn: {
+    width: 24,
+    height: 24,
+    background: '#F5F5F5',
+    border: 'none',
+    borderRadius: 6,
+    fontSize: 16,
+    color: '#888',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: 16,
+    marginBottom: 32
+  },
+  statCard: {
+    background: '#fff',
+    padding: 20,
+    borderRadius: 12,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+    textAlign: 'center'
+  },
+  statCardValue: {
+    fontSize: 28,
+    fontWeight: 700,
+    color: '#4F46E5'
+  },
+  statCardLabel: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: 4
+  },
+  subsectionTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    margin: '0 0 16px',
+    color: '#1a1a1a'
+  },
+  domainList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12
+  },
+  domainItem: {
+    background: '#fff',
+    padding: '12px 16px',
+    borderRadius: 10,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+  },
+  domainInfo: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  domainName: {
+    fontSize: 14,
+    fontWeight: 500
+  },
+  domainStats: {
+    fontSize: 12,
+    color: '#888'
+  },
+  domainBar: {
+    height: 6,
+    background: '#F3F4F6',
+    borderRadius: 3,
+    overflow: 'hidden'
+  },
+  domainBarFill: {
+    height: '100%',
+    background: 'linear-gradient(90deg, #4F46E5, #7C3AED)',
+    borderRadius: 3,
+    transition: 'width 0.3s'
   }
 }
 

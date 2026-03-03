@@ -1,6 +1,7 @@
 import type { TabData } from "./types"
 import { getGroupColor, getLevel1Domain } from "./utils"
 import { getSettings } from "./storage"
+import { addClosedPage, getVisitCount, recordVisit } from "./storage"
 
 const ALARM_NAME = "checkInactiveTabs"
 const TAB_DATA_KEY = "tabData"
@@ -64,15 +65,37 @@ export async function closeInactiveTabs(): Promise<void> {
     const domain = tab.url ? getLevel1Domain(tab.url) : null
     if (domain && settings.whitelistedDomains.includes(domain)) continue
 
+    let threshold = inactiveThresholdMs
+    
+    if (settings.enableSmartClose) {
+      const visitCount = await getVisitCount(domain || "")
+      if (visitCount >= settings.frequentVisitThreshold) {
+        threshold = threshold * settings.frequentVisitMultiplier
+      }
+    }
+
     const lastAccessed = tabData.tabs[tab.id]?.lastAccessed || tab.lastAccessed || currentTime
 
-    if (currentTime - lastAccessed >= inactiveThresholdMs) {
+    if (currentTime - lastAccessed >= threshold) {
       tabsToClose.push(tab.id)
     }
   }
 
   if (tabsToClose.length > 0) {
+    for (const tabId of tabsToClose) {
+      const tab = allTabs.find(t => t.id === tabId)
+      if (tab?.url && tab.title) {
+        const domain = getLevel1Domain(tab.url)
+        if (domain) {
+          await addClosedPage(tab.url, tab.title, domain)
+        }
+      }
+    }
     await chrome.tabs.remove(tabsToClose)
+    
+    const result = await chrome.storage.local.get("closedCount")
+    const newCount = (result.closedCount || 0) + tabsToClose.length
+    await chrome.storage.local.set({ closedCount: newCount })
   }
 }
 
@@ -174,6 +197,14 @@ chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   recordTabAccess(activeInfo.tabId)
   await persistAccessTimes()
+  
+  const tab = await chrome.tabs.get(activeInfo.tabId)
+  if (tab?.url) {
+    const domain = getLevel1Domain(tab.url)
+    if (domain) {
+      await recordVisit(domain)
+    }
+  }
 })
 
 chrome.tabs.onRemoved.addListener((tabId) => {
