@@ -89,6 +89,24 @@ function SettingsPage() {
             </div>
             <div style={styles.setting}>
               <div>
+                <div style={styles.settingLabel}>Cross-window group</div>
+                <div style={styles.settingDesc}>Group tabs across different windows</div>
+              </div>
+              <label style={styles.toggle}>
+                <input
+                  type="checkbox"
+                  checked={settings.crossWindowGroupEnabled}
+                  onChange={(e) => updateSetting('crossWindowGroupEnabled', e.target.checked)}
+                  style={styles.checkbox}
+                />
+                <span style={{
+                  ...styles.toggleSlider,
+                  ...(settings.crossWindowGroupEnabled ? styles.toggleSliderActive : {})
+                }} />
+              </label>
+            </div>
+            <div style={styles.setting}>
+              <div>
                 <div style={styles.settingLabel}>Auto-close inactive</div>
                 <div style={styles.settingDesc}>Automatically close tabs inactive for {settings.inactiveMinutes} minutes</div>
               </div>
@@ -102,6 +120,24 @@ function SettingsPage() {
                 <span style={{
                   ...styles.toggleSlider,
                   ...(settings.autoCloseEnabled ? styles.toggleSliderActive : {})
+                }} />
+              </label>
+            </div>
+            <div style={styles.setting}>
+              <div>
+                <div style={styles.settingLabel}>Close last tab</div>
+                <div style={styles.settingDesc}>Allow closing the last tab in a window</div>
+              </div>
+              <label style={styles.toggle}>
+                <input
+                  type="checkbox"
+                  checked={settings.closeLastTabEnabled}
+                  onChange={(e) => updateSetting('closeLastTabEnabled', e.target.checked)}
+                  style={styles.checkbox}
+                />
+                <span style={{
+                  ...styles.toggleSlider,
+                  ...(settings.closeLastTabEnabled ? styles.toggleSliderActive : {})
                 }} />
               </label>
             </div>

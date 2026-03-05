@@ -7,6 +7,7 @@ const ALARM_NAME = "checkInactiveTabs"
 const TAB_DATA_KEY = "tabData"
 
 const domainGroupMap = new Map<string, number>()
+const windowDomainGroupMap = new Map<number, Map<string, number>>()
 const tabLastAccessed = new Map<number, number>()
 
 function now(): number {
@@ -29,7 +30,19 @@ export async function groupTab(tab: chrome.tabs.Tab): Promise<void> {
   const domain = getLevel1Domain(tab.url)
   if (!domain) return
 
-  const existingGroupId = domainGroupMap.get(domain)
+  const windowId = tab.windowId
+  if (!windowId) return
+
+  let existingGroupId: number | undefined
+
+  if (settings.crossWindowGroupEnabled) {
+    existingGroupId = domainGroupMap.get(domain)
+  } else {
+    if (!windowDomainGroupMap.has(windowId)) {
+      windowDomainGroupMap.set(windowId, new Map())
+    }
+    existingGroupId = windowDomainGroupMap.get(windowId)?.get(domain)
+  }
 
   if (existingGroupId) {
     try {
@@ -37,7 +50,11 @@ export async function groupTab(tab: chrome.tabs.Tab): Promise<void> {
       await chrome.tabs.group({ tabIds: tab.id, groupId: existingGroupId })
       return
     } catch {
-      domainGroupMap.delete(domain)
+      if (settings.crossWindowGroupEnabled) {
+        domainGroupMap.delete(domain)
+      } else {
+        windowDomainGroupMap.get(windowId)?.delete(domain)
+      }
     }
   }
 
@@ -46,7 +63,15 @@ export async function groupTab(tab: chrome.tabs.Tab): Promise<void> {
     title: domain,
     color: getGroupColor(domain)
   })
-  domainGroupMap.set(domain, newGroupId)
+
+  if (settings.crossWindowGroupEnabled) {
+    domainGroupMap.set(domain, newGroupId)
+  } else {
+    if (!windowDomainGroupMap.has(windowId)) {
+      windowDomainGroupMap.set(windowId, new Map())
+    }
+    windowDomainGroupMap.get(windowId)!.set(domain, newGroupId)
+  }
 }
 
 export async function closeInactiveTabs(): Promise<void> {
@@ -58,6 +83,16 @@ export async function closeInactiveTabs(): Promise<void> {
   const allTabs = await chrome.tabs.query({})
   const tabData = await getTabData()
   const tabsToClose: number[] = []
+
+  // Build window tabs map: windowId -> tabIds
+  const windowTabsMap = new Map<number, number[]>()
+  for (const tab of allTabs) {
+    if (!tab.id || !tab.windowId) continue
+    if (!windowTabsMap.has(tab.windowId)) {
+      windowTabsMap.set(tab.windowId, [])
+    }
+    windowTabsMap.get(tab.windowId)!.push(tab.id)
+  }
 
   for (const tab of allTabs) {
     if (tab.pinned || tab.audible || !tab.id) continue
@@ -77,6 +112,19 @@ export async function closeInactiveTabs(): Promise<void> {
     const lastAccessed = tabData.tabs[tab.id]?.lastAccessed || tab.lastAccessed || currentTime
 
     if (currentTime - lastAccessed >= threshold) {
+      // Check if this is the last tab in the window
+      if (!settings.closeLastTabEnabled && tab.windowId) {
+        const windowTabs = windowTabsMap.get(tab.windowId) || []
+        const activeTabs = windowTabs.filter(tid => {
+          const t = allTabs.find(tab => tab.id === tid)
+          return t && !t.pinned && !t.audible
+        })
+        // Only close if there are other active tabs in the window
+        const otherActiveTabs = activeTabs.filter(tid => tid !== tab.id)
+        if (otherActiveTabs.length === 0) {
+          continue // Skip closing the last tab
+        }
+      }
       tabsToClose.push(tab.id)
     }
   }
@@ -116,39 +164,91 @@ export function removeTabRecord(tabId: number): void {
 }
 
 export async function loadExistingGroups(): Promise<void> {
+  const settings = await getSettings()
   const groups = await chrome.tabGroups.query({})
+  
+  windowDomainGroupMap.clear()
+  domainGroupMap.clear()
+
   for (const group of groups) {
     const tabs = await chrome.tabs.query({ groupId: group.id })
     if (tabs.length > 0 && tabs[0].url) {
       const domain = getLevel1Domain(tabs[0].url)
       if (domain) {
-        domainGroupMap.set(domain, group.id)
+        if (settings.crossWindowGroupEnabled) {
+          domainGroupMap.set(domain, group.id)
+        } else {
+          const windowId = tabs[0].windowId
+          if (windowId) {
+            if (!windowDomainGroupMap.has(windowId)) {
+              windowDomainGroupMap.set(windowId, new Map())
+            }
+            windowDomainGroupMap.get(windowId)!.set(domain, group.id)
+          }
+        }
       }
     }
   }
 }
 
 export async function groupAllTabs(): Promise<void> {
+  const settings = await getSettings()
   const tabs = await chrome.tabs.query({})
-  const domainTabs = new Map<string, number[]>()
 
-  for (const tab of tabs) {
-    if (!tab.url || !tab.id) continue
-    const domain = getLevel1Domain(tab.url)
-    if (!domain) continue
+  if (settings.crossWindowGroupEnabled) {
+    const domainTabs = new Map<string, number[]>()
 
-    if (!domainTabs.has(domain)) {
-      domainTabs.set(domain, [])
+    for (const tab of tabs) {
+      if (!tab.url || !tab.id) continue
+      const domain = getLevel1Domain(tab.url)
+      if (!domain) continue
+
+      if (!domainTabs.has(domain)) {
+        domainTabs.set(domain, [])
+      }
+      domainTabs.get(domain)!.push(tab.id)
     }
-    domainTabs.get(domain)!.push(tab.id)
-  }
 
-  for (const [domain, tabIds] of domainTabs) {
-    const groupId = await chrome.tabs.group({ tabIds })
-    await chrome.tabGroups.update(groupId, {
-      title: domain,
-      color: getGroupColor(domain)
-    })
+    for (const [domain, tabIds] of domainTabs) {
+      const groupId = await chrome.tabs.group({ tabIds })
+      await chrome.tabGroups.update(groupId, {
+        title: domain,
+        color: getGroupColor(domain)
+      })
+    }
+  } else {
+    const windowTabsMap = new Map<number, chrome.tabs.Tab[]>()
+    
+    for (const tab of tabs) {
+      if (!tab.url || !tab.id || !tab.windowId) continue
+      if (!windowTabsMap.has(tab.windowId)) {
+        windowTabsMap.set(tab.windowId, [])
+      }
+      windowTabsMap.get(tab.windowId)!.push(tab)
+    }
+
+    for (const [, windowTabs] of windowTabsMap) {
+      const domainTabs = new Map<string, number[]>()
+
+      for (const tab of windowTabs) {
+        if (!tab.url || !tab.id) continue
+        const domain = getLevel1Domain(tab.url)
+        if (!domain) continue
+
+        if (!domainTabs.has(domain)) {
+          domainTabs.set(domain, [])
+        }
+        domainTabs.get(domain)!.push(tab.id)
+      }
+
+      for (const [domain, tabIds] of domainTabs) {
+        const groupId = await chrome.tabs.group({ tabIds })
+        await chrome.tabGroups.update(groupId, {
+          title: domain,
+          color: getGroupColor(domain)
+        })
+      }
+    }
   }
 }
 

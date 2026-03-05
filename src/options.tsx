@@ -18,6 +18,10 @@ function OptionsIndex() {
   const [appStats, setAppStats] = useState<{totalClosed: number, totalTimeSaved: number}>({totalClosed: 0, totalTimeSaved: 0})
 
   useEffect(() => {
+    document.title = "Tab Manager"
+  }, [])
+
+  useEffect(() => {
     Promise.all([loadSettings(), loadClosedCount()])
   }, [])
 
@@ -193,6 +197,18 @@ function OptionsIndex() {
                     onClick={() => updateSetting("autoGroupEnabled", !settings.autoGroupEnabled)}
                   >
                     <div style={{ ...styles.toggleKnob, ...(settings.autoGroupEnabled ? styles.toggleKnobActive : {}) }} />
+                  </button>
+                </div>
+                <div style={{...styles.settingCard, marginTop: 12}}>
+                  <div style={styles.settingInfo}>
+                    <div style={styles.settingLabel}>Cross-window group</div>
+                    <div style={styles.settingDesc}>Group tabs from the same domain across different windows</div>
+                  </div>
+                  <button
+                    style={{ ...styles.toggle, ...(settings.crossWindowGroupEnabled ? styles.toggleActive : {}) }}
+                    onClick={() => updateSetting("crossWindowGroupEnabled", !settings.crossWindowGroupEnabled)}
+                  >
+                    <div style={{ ...styles.toggleKnob, ...(settings.crossWindowGroupEnabled ? styles.toggleKnobActive : {}) }} />
                   </button>
                 </div>
               </section>

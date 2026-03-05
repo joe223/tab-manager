@@ -59,6 +59,13 @@ function IndexPopup() {
     showNotification(newValue ? "Auto-close enabled" : "Auto-close disabled")
   }
 
+  async function toggleCrossWindowGroup() {
+    const newValue = !settings.crossWindowGroupEnabled
+    await saveSettings({ crossWindowGroupEnabled: newValue })
+    setSettings({ ...settings, crossWindowGroupEnabled: newValue })
+    showNotification(newValue ? "Cross-window group enabled" : "Cross-window group disabled")
+  }
+
   async function handleGroupAll() {
     const tabs = await chrome.tabs.query({})
     const domainTabs = new Map<string, number[]>()
@@ -201,6 +208,24 @@ function IndexPopup() {
             <div style={{
               ...styles.toggleKnob,
               ...(settings.autoCloseEnabled ? styles.toggleKnobActive : {})
+            }} />
+          </button>
+        </div>
+        <div style={styles.toggleRow}>
+          <div>
+            <div style={styles.toggleLabel}>Cross-window group</div>
+            <div style={styles.toggleDesc}>Group tabs across windows</div>
+          </div>
+          <button
+            style={{
+              ...styles.toggle,
+              ...(settings.crossWindowGroupEnabled ? styles.toggleActive : {})
+            }}
+            onClick={toggleCrossWindowGroup}
+          >
+            <div style={{
+              ...styles.toggleKnob,
+              ...(settings.crossWindowGroupEnabled ? styles.toggleKnobActive : {})
             }} />
           </button>
         </div>

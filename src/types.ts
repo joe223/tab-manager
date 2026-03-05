@@ -7,6 +7,8 @@ export interface Settings {
   enableSmartClose: boolean
   frequentVisitThreshold: number
   frequentVisitMultiplier: number
+  closeLastTabEnabled: boolean
+  crossWindowGroupEnabled: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -17,7 +19,9 @@ export const DEFAULT_SETTINGS: Settings = {
   whitelistedDomains: [],
   enableSmartClose: true,
   frequentVisitThreshold: 10,
-  frequentVisitMultiplier: 3
+  frequentVisitMultiplier: 3,
+  closeLastTabEnabled: false,
+  crossWindowGroupEnabled: false
 }
 
 export interface TabData {

@@ -1,6 +1,6 @@
 {
   "name": "tab-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Auto-group tabs by domain and close inactive tabs",
   "scripts": {
     "dev": "plasmo dev",

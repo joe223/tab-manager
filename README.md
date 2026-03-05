@@ -1,7 +1,7 @@
 # Tab Manager
 
 <p align="center">
-  <img src="assets/icon.svg" width="128" height="128" alt="Tab Manager Logo">
+  <img src="assets/icon.png" width="128" height="128" alt="Tab Manager Logo">
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/chrome-Manifest%20V3-green" alt="Manifest V3">
   <img src="https://img.shields.io/badge/license-MIT-orange" alt="License">
   <img src="https://img.shields.io/badge/react-18.3-61DAFB" alt="React">
