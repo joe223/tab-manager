@@ -89,19 +89,19 @@ function SettingsPage() {
             </div>
             <div style={styles.setting}>
               <div>
-                <div style={styles.settingLabel}>Cross-window group</div>
-                <div style={styles.settingDesc}>Group tabs across different windows</div>
+                <div style={styles.settingLabel}>Match domain groups across windows</div>
+                <div style={styles.settingDesc}>Keep same top-level domains grouped consistently in each window</div>
               </div>
               <label style={styles.toggle}>
                 <input
                   type="checkbox"
-                  checked={settings.crossWindowGroupEnabled}
-                  onChange={(e) => updateSetting('crossWindowGroupEnabled', e.target.checked)}
+                  checked={settings.matchDomainGroupsAcrossWindows}
+                  onChange={(e) => updateSetting('matchDomainGroupsAcrossWindows', e.target.checked)}
                   style={styles.checkbox}
                 />
                 <span style={{
                   ...styles.toggleSlider,
-                  ...(settings.crossWindowGroupEnabled ? styles.toggleSliderActive : {})
+                  ...(settings.matchDomainGroupsAcrossWindows ? styles.toggleSliderActive : {})
                 }} />
               </label>
             </div>

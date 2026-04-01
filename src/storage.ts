@@ -9,9 +9,19 @@ const DOMAIN_STATS_KEY = "domainStats"
 const MAX_CLOSED_PAGES = 100
 const MAX_HISTORY_DAYS = 30
 
+type LegacySettings = Partial<Settings> & {
+  crossWindowGroupEnabled?: boolean
+}
+
 export async function getSettings(): Promise<Settings> {
-  const settings = await storage.get<Settings>(SETTINGS_KEY)
-  return { ...DEFAULT_SETTINGS, ...settings }
+  const settings = await storage.get<LegacySettings>(SETTINGS_KEY)
+
+  return {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    matchDomainGroupsAcrossWindows:
+      settings?.matchDomainGroupsAcrossWindows ?? settings?.crossWindowGroupEnabled ?? DEFAULT_SETTINGS.matchDomainGroupsAcrossWindows
+  }
 }
 
 export async function saveSettings(settings: Partial<Settings>): Promise<void> {

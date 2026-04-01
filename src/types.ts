@@ -8,7 +8,7 @@ export interface Settings {
   frequentVisitThreshold: number
   frequentVisitMultiplier: number
   closeLastTabEnabled: boolean
-  crossWindowGroupEnabled: boolean
+  matchDomainGroupsAcrossWindows: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   frequentVisitThreshold: 10,
   frequentVisitMultiplier: 3,
   closeLastTabEnabled: false,
-  crossWindowGroupEnabled: false
+  matchDomainGroupsAcrossWindows: false
 }
 
 export interface TabData {

@@ -201,14 +201,14 @@ function OptionsIndex() {
                 </div>
                 <div style={{...styles.settingCard, marginTop: 12}}>
                   <div style={styles.settingInfo}>
-                    <div style={styles.settingLabel}>Cross-window group</div>
-                    <div style={styles.settingDesc}>Group tabs from the same domain across different windows</div>
+                    <div style={styles.settingLabel}>Match domain groups across windows</div>
+                    <div style={styles.settingDesc}>Keep same top-level domains grouped consistently in each window</div>
                   </div>
                   <button
-                    style={{ ...styles.toggle, ...(settings.crossWindowGroupEnabled ? styles.toggleActive : {}) }}
-                    onClick={() => updateSetting("crossWindowGroupEnabled", !settings.crossWindowGroupEnabled)}
+                    style={{ ...styles.toggle, ...(settings.matchDomainGroupsAcrossWindows ? styles.toggleActive : {}) }}
+                    onClick={() => updateSetting("matchDomainGroupsAcrossWindows", !settings.matchDomainGroupsAcrossWindows)}
                   >
-                    <div style={{ ...styles.toggleKnob, ...(settings.crossWindowGroupEnabled ? styles.toggleKnobActive : {}) }} />
+                    <div style={{ ...styles.toggleKnob, ...(settings.matchDomainGroupsAcrossWindows ? styles.toggleKnobActive : {}) }} />
                   </button>
                 </div>
               </section>

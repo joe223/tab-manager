@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react"
 import { getSettings, saveSettings } from "./storage"
-import { getGroupColor, getLevel1Domain } from "./utils"
+import { getLevel1Domain } from "./utils"
 import type { Settings } from "./types"
 import { DEFAULT_SETTINGS } from "./types"
+
+type BackgroundActionResponse = {
+  ok: boolean
+  error?: string
+  groupsCreated?: number
+  ungroupedCount?: number
+}
 
 function IndexPopup() {
   const [tabCount, setTabCount] = useState(0)
@@ -45,6 +52,14 @@ function IndexPopup() {
     setTimeout(() => setShowToast(false), 2000)
   }
 
+  async function sendBackgroundAction(type: "group-all-tabs" | "ungroup-all-tabs"): Promise<BackgroundActionResponse> {
+    const response = await chrome.runtime.sendMessage({ type }) as BackgroundActionResponse | undefined
+    if (!response?.ok) {
+      throw new Error(response?.error || "Background action failed")
+    }
+    return response
+  }
+
   async function toggleAutoGroup() {
     const newValue = !settings.autoGroupEnabled
     await saveSettings({ autoGroupEnabled: newValue })
@@ -60,50 +75,40 @@ function IndexPopup() {
   }
 
   async function toggleCrossWindowGroup() {
-    const newValue = !settings.crossWindowGroupEnabled
-    await saveSettings({ crossWindowGroupEnabled: newValue })
-    setSettings({ ...settings, crossWindowGroupEnabled: newValue })
-    showNotification(newValue ? "Cross-window group enabled" : "Cross-window group disabled")
+    const newValue = !settings.matchDomainGroupsAcrossWindows
+    await saveSettings({ matchDomainGroupsAcrossWindows: newValue })
+    setSettings({ ...settings, matchDomainGroupsAcrossWindows: newValue })
+    showNotification(newValue ? "Cross-window domain matching enabled" : "Cross-window domain matching disabled")
   }
 
   async function handleGroupAll() {
-    const tabs = await chrome.tabs.query({})
-    const domainTabs = new Map<string, number[]>()
+    try {
+      const response = await sendBackgroundAction("group-all-tabs")
+      await loadStats()
 
-    for (const tab of tabs) {
-      if (!tab.url || !tab.id) continue
-      const domain = getLevel1Domain(tab.url)
-      if (!domain) continue
-
-      if (!domainTabs.has(domain)) {
-        domainTabs.set(domain, [])
+      if ((response.groupsCreated || 0) > 0) {
+        showNotification(`Grouped into ${response.groupsCreated} groups`)
+      } else {
+        showNotification("No groupable tabs found")
       }
-      domainTabs.get(domain)!.push(tab.id)
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : "Failed to group tabs")
     }
-
-    let groupsCreated = 0
-    for (const [domain, tabIds] of domainTabs) {
-      const groupId = await chrome.tabs.group({ tabIds })
-      await chrome.tabGroups.update(groupId, {
-        title: domain,
-        color: getGroupColor(domain)
-      })
-      groupsCreated++
-    }
-
-    await loadStats()
-    showNotification(`Grouped into ${groupsCreated} groups`)
   }
 
   async function handleUngroupAll() {
-    const tabs = await chrome.tabs.query({})
-    for (const tab of tabs) {
-      if (tab.id && tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
-        await chrome.tabs.ungroup(tab.id)
+    try {
+      const response = await sendBackgroundAction("ungroup-all-tabs")
+      await loadStats()
+
+      if ((response.ungroupedCount || 0) > 0) {
+        showNotification("All tabs ungrouped")
+      } else {
+        showNotification("No grouped tabs found")
       }
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : "Failed to ungroup tabs")
     }
-    await loadStats()
-    showNotification("All tabs ungrouped")
   }
 
   async function handleCloseInactive() {
@@ -213,19 +218,19 @@ function IndexPopup() {
         </div>
         <div style={styles.toggleRow}>
           <div>
-            <div style={styles.toggleLabel}>Cross-window group</div>
-            <div style={styles.toggleDesc}>Group tabs across windows</div>
+            <div style={styles.toggleLabel}>Match domain groups across windows</div>
+            <div style={styles.toggleDesc}>Keep same top-level domains grouped consistently in each window</div>
           </div>
           <button
             style={{
               ...styles.toggle,
-              ...(settings.crossWindowGroupEnabled ? styles.toggleActive : {})
+              ...(settings.matchDomainGroupsAcrossWindows ? styles.toggleActive : {})
             }}
             onClick={toggleCrossWindowGroup}
           >
             <div style={{
               ...styles.toggleKnob,
-              ...(settings.crossWindowGroupEnabled ? styles.toggleKnobActive : {})
+              ...(settings.matchDomainGroupsAcrossWindows ? styles.toggleKnobActive : {})
             }} />
           </button>
         </div>
